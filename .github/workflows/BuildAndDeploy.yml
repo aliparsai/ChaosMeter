@@ -1,0 +1,74 @@
+name: Build and Deploy
+
+on:
+   push:
+     tags:
+       - '*'
+
+jobs:
+   deploy:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.6'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade setuptools wheel twine graphviz antlr4-python3-runtime odfpy littledarwin
+    - name: Build and publish
+      env:
+        TWINE_USERNAME: ${{ secrets.TWINE_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
+      run: |
+        python setup.py sdist bdist_wheel
+        twine upload dist/*
+
+
+   build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, windows-2019]
+
+    steps:
+    - name: Get Version
+      id: get_version
+      shell: bash
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\/v/}
+
+    - name: Set Up Python 3
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.6'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade pyinstaller setuptools wheel graphviz antlr4-python3-runtime odfpy littledarwin
+    - uses: actions/checkout@v2
+      with:
+        ref: 'master'
+
+    - name: Run PyInstaller
+      run: python -m PyInstaller --onefile --hidden-import='pkg_resources.py2_warn' ./ChaosMeter.py
+
+    - name: Commit Changes
+      shell: bash
+      run: |
+        mkdir -p binaries/${{ steps.get_version.outputs.VERSION }}
+        mv ./dist/ChaosMeter* ./binaries/${{ steps.get_version.outputs.VERSION }}
+        git config user.email "AutomaticBuilder@githubactions.job"
+        git config user.name "AutomaticBuilder"
+        git add ./binaries
+        git commit -m Adding\ Binary\ Version\ ${{ steps.get_version.outputs.VERSION }}\ ${{ runner.os }}
+        git pull origin master
+
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
