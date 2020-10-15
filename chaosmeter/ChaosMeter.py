@@ -121,8 +121,8 @@ def main(mockArgs: list = None):
     fileList = list()
 
     for root, dirnames, filenames in os.walk(sourcePath):
-        for fileName in fnmatch.filter(filenames, "*.java"):
-            fileList.append(os.path.join(root, fileName))
+        for filePath in fnmatch.filter(filenames, "*.java"):
+            fileList.append(os.path.join(root, filePath))
 
     fileCounter = 0
     fileCount = len(fileList)
@@ -131,7 +131,8 @@ def main(mockArgs: list = None):
     print("Target Path: ", targetPath)
 
     # Main loop
-
+    completeResults = dict()
+    completeResultsPath = os.path.join(targetPath, "FinalReport")
     for srcFile in fileList:
         fileCounter += 1
         print("\n(" + str(fileCounter) + "/" + str(fileCount) + ") Source file: ", srcFile)
@@ -155,8 +156,9 @@ def main(mockArgs: list = None):
         metricResultsAggregate, metricLabels = Metric.aggregateMetrics(**metricResults)
 
         # Prepare the result file
-
         fileRelativePath = os.path.relpath(srcFile, sourcePath)
+        completeResults[fileRelativePath] = metricResultsAggregate
+
         srcFileRoot, srcFileName = os.path.split(srcFile)
         targetDir = os.path.join(targetPath, os.path.relpath(srcFileRoot, sourcePath))
         if not os.path.exists(targetDir):
@@ -167,6 +169,21 @@ def main(mockArgs: list = None):
         for writerInstance in writerInstanceList:
             fileContent = writerInstance.createTargetFormat(metricResultsAggregate, metricLabels)
             writerInstance.write(targetFilePath, fileContent)
+
+
+    completeResultsLabels = ["File"]
+    completeResultsLabels.extend(metricLabels)
+    completeResultsAggregate = [completeResultsLabels]
+
+    for filePath in sorted(completeResults.keys()):
+        for methodName in sorted(completeResults[filePath].keys()):
+            cellList = [filePath, methodName]
+            cellList.extend(completeResults[filePath][methodName])
+            completeResultsAggregate.append(cellList)
+
+    for writerInstance in writerInstanceList:
+            completeFileContent = writerInstance.createFinalReportTargetFormat(completeResultsAggregate)
+            writerInstance.write(completeResultsPath, completeFileContent)
 
     return 0
 

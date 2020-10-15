@@ -20,3 +20,10 @@ class CSVWriter(Writer):
         fileContent = os.linesep.join(fileContentLines)
         return fileContent.encode()
 
+    def createFinalReportTargetFormat(self, finalReport: List[list]) -> bytes:
+        fileContentLines = [';'.join([str(x) for x in line]) for line in finalReport]
+        fileContent = os.linesep.join(fileContentLines)
+        return fileContent.encode()
+
+
+

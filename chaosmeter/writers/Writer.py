@@ -36,6 +36,9 @@ class Writer(object):
     def createTargetFormat(self, metricValues: Dict[str, List[int]], metricLabels: List[str]) -> bytes:
         pass
 
+    def createFinalReportTargetFormat(self, finalReport: List[list]) -> bytes:
+        pass
+
     def write(self, filePath: str, fileContent: bytes):
         with open(filePath + self.extension, 'wb') as outputHandle:
             outputHandle.write(fileContent)
