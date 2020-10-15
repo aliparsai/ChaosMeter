@@ -1,19 +1,7 @@
 from typing import Set, List, Dict, Tuple
 
-from littledarwin.JavaParse import JavaParse
 from antlr4 import *
-
-
-class Metric(object):
-    instantiable = False
-    name = "Metric"
-    abbreviation = "M"
-
-    def __init__(self, javaParseInstance: JavaParse):
-        self.javaParseInstance = javaParseInstance
-
-    def calculate(self, tree: RuleContext, sourceCode: str = ""):
-        pass
+from littledarwin.JavaParse import JavaParse
 
 
 def getAllInstantiableSubclasses(parentClass):
@@ -34,6 +22,19 @@ def getAllInstantiableSubclasses(parentClass):
     return allInstantiableSubclasses
 
 
+class Metric(object):
+    instantiable = False
+    name = "Metric"
+    abbreviation = "M"
+
+    def __init__(self, javaParseInstance: JavaParse):
+        self.javaParseInstance = javaParseInstance
+        self.defaultValue = 0
+
+    def calculate(self, tree: RuleContext, sourceCode: str = ""):
+        pass
+
+
 def getAllMetrics() -> Set[Metric]:
     return getAllInstantiableSubclasses(Metric)
 
@@ -41,14 +42,16 @@ def getAllMetrics() -> Set[Metric]:
 def aggregateMetrics(**kargs: Dict[str, int]) -> Tuple[Dict[str, List[int]], List[str]]:
     aggregate = dict()
     labels = ["Method Name"]
-    labels.extend([str(metricName) for metricName in kargs.keys()])
+    metricList = sorted(kargs.keys())
+    labels.extend([str(metricName) for metricName in metricList])
 
     methodList = set()
 
-    for mL in kargs.values():
-        methodList.update(mL.keys())
+    for mL in metricList:
+        methodList.update(kargs[mL].keys())
 
     for method in methodList:
-        aggregate[method] = [metricValue.get(method, 0) for metricValue in kargs.values()]
-
+        aggregate[method] = list()
+        for mL in metricList:
+            aggregate[method].append(kargs[mL].get(method, 0))
     return aggregate, labels

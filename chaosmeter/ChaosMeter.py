@@ -26,7 +26,7 @@
 ##       https://www.parsai.net                                                                               ##
 ##                                                                                                            ##
 ################################################################################################################
-
+import fnmatch
 import os
 import sys
 from optparse import OptionParser, Values
@@ -35,6 +35,7 @@ from littledarwin import JavaParse
 from littledarwin import JavaIO
 
 from .metrics import *
+from .writers import *
 from chaosmeter import License
 
 chaosMeterVersion = '0.1.0'
@@ -76,6 +77,9 @@ def main(mockArgs: list = None):
         print("Source path must be a directory.")
         sys.exit(2)
 
+    sourcePath = os.path.abspath(options.sourcePath)
+    targetPath = os.path.abspath(options.targetPath)
+
     javaParseInstance = JavaParse.JavaParse()
     javaIOInstance = JavaIO.JavaIO()
 
@@ -93,130 +97,78 @@ def main(mockArgs: list = None):
         metricInstanceList.append(metricInstance)
         print("Found metric: \"" + MetricClass.name + "\"")
 
-    # Get file list
+    print(os.linesep)
 
+    # Find all writers
+    writerList = Writer.getAllWriters()
+    writerInstanceList = list()
 
+    if len(writerList) == 0:
+        print("No writers found!")
+        sys.exit(4)
 
+    for WriterClass in writerList:
+        writerInstance = WriterClass(targetPath)
+        writerInstanceList.append(writerInstance)
+        print("Found writer: \"" + WriterClass.name + "\"")
 
+    # Get the file list
 
-    return 0
-
-
-
-def mutationPhase(options, filterType, filterList, higherOrder):
-    """
-
-    :param options:
-    :type options:
-    :param filterType:
-    :type filterType:
-    :param filterList:
-    :type filterList:
-    :param higherOrder:
-    :type higherOrder:
-    """
-    # creating our module objects.
-    javaIO = JavaIO(options.isVerboseActive)
-    javaParse = JavaParse(options.isVerboseActive)
-    totalMutantCount = 0
-
-    try:
-        assert os.path.isdir(options.sourcePath)
-    except AssertionError as exception:
+    if not os.path.isdir(sourcePath):
         print("Source path must be a directory.")
-        sys.exit(1)
-    # getting the list of files.
-    javaIO.listFiles(targetPath=os.path.abspath(options.sourcePath), buildPath=os.path.abspath(options.buildPath),
-                     filterType=filterType, filterList=filterList)
-    fileCounter = 0
-    fileCount = len(javaIO.fileList)
-    # creating a database for generated mutants. the format of this database is different on different platforms,
-    # so it cannot be simply copied from a platform to another.
-    databasePath = os.path.join(javaIO.targetDirectory, "mutationdatabase")
-    densityResultsPath = os.path.join(javaIO.targetDirectory, "ProjectDensityReport.csv")
-    print("Source Path: ", javaIO.sourceDirectory)
-    print("Target Path: ", javaIO.targetDirectory)
-    print("Creating Mutation Database: ", databasePath)
-    mutationDatabase = shelve.open(databasePath, "c")
-    mutantTypeDatabase = dict()
-    averageDensityDict = dict()
+        sys.exit(5)
 
-    # go through each file, parse it, calculate all mutations, and generate files accordingly.
-    for srcFile in javaIO.fileList:
-        print("\n(" + str(fileCounter + 1) + "/" + str(fileCount) + ") Source file: ", srcFile)
-        targetList = list()
+    fileList = list()
+
+    for root, dirnames, filenames in os.walk(sourcePath):
+        for fileName in fnmatch.filter(filenames, "*.java"):
+            fileList.append(os.path.join(root, fileName))
+
+    fileCounter = 0
+    fileCount = len(fileList)
+
+    print("Source Path: ", sourcePath)
+    print("Target Path: ", targetPath)
+
+    # Main loop
+
+    for srcFile in fileList:
+        fileCounter += 1
+        print("\n(" + str(fileCounter) + "/" + str(fileCount) + ") Source file: ", srcFile)
 
         try:
             # parsing the source file into a tree.
-            sourceCode = javaIO.getFileContent(srcFile)
-            tree = javaParse.parse(sourceCode)
+            sourceCode = javaIOInstance.getFileContent(srcFile)
+            tree = javaParseInstance.parse(sourceCode)
 
         except Exception as e:
             print("Error in parsing Java code, skipping the file.")
             sys.stderr.write(str(e))
             continue
 
-        fileCounter += 1
+        # Calculate metrics
 
-        enabledMutators = ["Traditional"]
+        metricResults = dict()
+        for metricInstance in metricInstanceList:
+            metricResults[metricInstance.name] = metricInstance.calculate(tree, sourceCode)
 
-        if options.isNullCheck:
-            enabledMutators = ["Null"]
+        metricResultsAggregate, metricLabels = Metric.aggregateMetrics(**metricResults)
 
-        if options.isAll:
-            enabledMutators = ["All"]
+        # Prepare the result file
 
-        if options.isMethodLevel:
-            enabledMutators = ["Method"]
+        fileRelativePath = os.path.relpath(srcFile, sourcePath)
+        srcFileRoot, srcFileName = os.path.split(srcFile)
+        targetDir = os.path.join(targetPath, os.path.relpath(srcFileRoot, sourcePath))
+        if not os.path.exists(targetDir):
+            os.makedirs(targetDir)
 
-        # apply mutations on the tree and receive the resulting mutants as a list of strings, and a detailed
-        # list of which operators created how many mutants.
+        targetFilePath = os.path.splitext(os.path.join(targetDir, srcFileName))[0]
 
-        javaMutate = JavaMutate(tree, sourceCode, javaParse, options.isVerboseActive)
+        for writerInstance in writerInstanceList:
+            fileContent = writerInstance.createTargetFormat(metricResultsAggregate, metricLabels)
+            writerInstance.write(targetFilePath, fileContent)
 
-        if higherOrder == 1:
-            mutated, mutantTypes = javaMutate.gatherMutants(enabledMutators)
-        else:
-            mutated, mutantTypes = javaMutate.gatherHigherOrderMutants(higherOrder, enabledMutators)
-
-        print("--> Mutations found: ", len(mutated))
-
-        # go through all mutant types, and add them in total. also output the info to the user.
-        for mutantType in mutantTypes.keys():
-            if mutantTypes[mutantType] > 0:
-                print("---->", mutantType, ":", mutantTypes[mutantType])
-            mutantTypeDatabase[mutantType] = mutantTypes[mutantType] + mutantTypeDatabase.get(mutantType, 0)
-        totalMutantCount += len(mutated)
-
-        # for each mutant, generate the file, and add it to the list.
-        fileRelativePath = os.path.relpath(srcFile, javaIO.sourceDirectory)
-        densityReport = javaMutate.aggregateReport(littleDarwinVersion)
-        averageDensityDict[fileRelativePath] = javaMutate.averageDensity
-        aggregateComplexity = javaIO.getAggregateComplexityReport(javaMutate.mutantsPerMethod,
-                                                                  javaParse.getCyclomaticComplexityAllMethods(tree),
-                                                                  javaParse.getLinesOfCodePerMethod(tree))
-
-        for mutatedFile in mutated:
-            targetList.append(javaIO.generateNewFile(srcFile, mutatedFile, javaMutate.mutantsPerLine,
-                                                     densityReport, aggregateComplexity))
-
-        # if the list is not empty (some mutants were found), put the data in the database.
-        if len(targetList) != 0:
-            mutationDatabase[fileRelativePath] = targetList
-
-        del javaMutate
-
-    mutationDatabase.close()
-    print("\nTotal mutations found: ", totalMutantCount)
-
-    with open(densityResultsPath, 'w') as densityReportHandle:
-        for key in averageDensityDict.keys():
-            densityReportHandle.write(key + ',' + str(averageDensityDict[key]) + '\n')
-
-    for mutantType in list(mutantTypeDatabase.keys()):
-        if mutantTypeDatabase[mutantType] > 0:
-            print("-->", mutantType + ":", mutantTypeDatabase[mutantType])
-
+    return 0
 
 
 def parseCmdArgs(optionParser: OptionParser, mockArgs: list = None) -> Values:
@@ -248,3 +200,4 @@ def parseCmdArgs(optionParser: OptionParser, mockArgs: list = None) -> Values:
         sys.exit(0)
 
     return options
+

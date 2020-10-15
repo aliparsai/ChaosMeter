@@ -15,13 +15,13 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     license=__license__,
     packages=setuptools.find_packages(),
-    install_requires=['littledarwin'],
+    install_requires=['antlr4-python3-runtime', 'odfpy', 'littledarwin'],
     entry_points={'console_scripts': ['chaosmeter=chaosmeter.__main__:entryPoint', ], },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.5',
+    python_requires='>=3.6',
 )
 

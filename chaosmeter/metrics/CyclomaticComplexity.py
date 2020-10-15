@@ -10,6 +10,7 @@ class CyclomaticComplexity(Metric.Metric):
 
     def __init__(self, javaParseInstance: JavaParse):
         super().__init__(javaParseInstance)
+        self.defaultValue = 1
 
     def calculate(self, tree: RuleContext, sourceCode: str = ""):
         return self.javaParseInstance.getCyclomaticComplexityAllMethods(tree)
