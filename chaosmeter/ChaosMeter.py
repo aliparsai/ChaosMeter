@@ -33,12 +33,13 @@ from optparse import OptionParser, Values
 
 from littledarwin import JavaParse
 from littledarwin import JavaIO
+from tqdm import tqdm
 
 from .metrics import *
 from .writers import *
 from chaosmeter import License
 
-chaosMeterVersion = '0.1.0'
+chaosMeterVersion = '0.1.1'
 
 
 def main(mockArgs: list = None):
@@ -127,15 +128,19 @@ def main(mockArgs: list = None):
     fileCounter = 0
     fileCount = len(fileList)
 
+    print(os.linesep)
     print("Source Path: ", sourcePath)
     print("Target Path: ", targetPath)
+    print(os.linesep)
 
     # Main loop
     completeResults = dict()
     completeResultsPath = os.path.join(targetPath, "FinalReport")
-    for srcFile in fileList:
+    for srcFile in tqdm(fileList, dynamic_ncols=True, unit='files'):
         fileCounter += 1
-        print("\n(" + str(fileCounter) + "/" + str(fileCount) + ") Source file: ", srcFile)
+        fileRelativePath = os.path.relpath(srcFile, sourcePath)
+
+        tqdm.write("({:,}/{:,}) {}".format(fileCounter, fileCount, fileRelativePath), end="\n\n")
 
         try:
             # parsing the source file into a tree.
@@ -143,8 +148,8 @@ def main(mockArgs: list = None):
             tree = javaParseInstance.parse(sourceCode)
 
         except Exception as e:
-            print("Error in parsing Java code, skipping the file.")
-            sys.stderr.write(str(e))
+            tqdm.write("Error in parsing Java code, skipping the file.\n")
+            tqdm.write(str(e), file=sys.stderr)
             continue
 
         # Calculate metrics
@@ -156,7 +161,6 @@ def main(mockArgs: list = None):
         metricResultsAggregate, metricLabels = Metric.aggregateMetrics(**metricResults)
 
         # Prepare the result file
-        fileRelativePath = os.path.relpath(srcFile, sourcePath)
         completeResults[fileRelativePath] = metricResultsAggregate
 
         srcFileRoot, srcFileName = os.path.split(srcFile)
@@ -170,7 +174,6 @@ def main(mockArgs: list = None):
             fileContent = writerInstance.createTargetFormat(metricResultsAggregate, metricLabels)
             writerInstance.write(targetFilePath, fileContent)
 
-
     completeResultsLabels = ["File"]
     completeResultsLabels.extend(metricLabels)
     completeResultsAggregate = [completeResultsLabels]
@@ -182,8 +185,10 @@ def main(mockArgs: list = None):
             completeResultsAggregate.append(cellList)
 
     for writerInstance in writerInstanceList:
-            completeFileContent = writerInstance.createFinalReportTargetFormat(completeResultsAggregate)
-            writerInstance.write(completeResultsPath, completeFileContent)
+        completeFileContent = writerInstance.createFinalReportTargetFormat(completeResultsAggregate)
+        writerInstance.write(completeResultsPath, completeFileContent)
+
+    print(os.linesep)
 
     return 0
 
@@ -217,4 +222,3 @@ def parseCmdArgs(optionParser: OptionParser, mockArgs: list = None) -> Values:
         sys.exit(0)
 
     return options
-

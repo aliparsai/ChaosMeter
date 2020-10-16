@@ -15,7 +15,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     license=__license__,
     packages=setuptools.find_packages(),
-    install_requires=['antlr4-python3-runtime', 'odfpy', 'littledarwin'],
+    install_requires=['antlr4-python3-runtime', 'tqdm', 'odfpy', 'littledarwin'],
     entry_points={'console_scripts': ['chaosmeter=chaosmeter.__main__:entryPoint', ], },
     classifiers=[
         "Programming Language :: Python :: 3",
