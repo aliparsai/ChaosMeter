@@ -39,7 +39,7 @@ from .metrics import *
 from .writers import *
 from chaosmeter import License
 
-chaosMeterVersion = '0.1.1'
+chaosMeterVersion = '0.1.2'
 
 
 def main(mockArgs: list = None):
@@ -139,17 +139,19 @@ def main(mockArgs: list = None):
     for srcFile in tqdm(fileList, dynamic_ncols=True, unit='files'):
         fileCounter += 1
         fileRelativePath = os.path.relpath(srcFile, sourcePath)
-
-        tqdm.write("({:,}/{:,}) {}".format(fileCounter, fileCount, fileRelativePath), end="\n\n")
+        try:
+            tqdm.write("({:,}/{:,}) {}".format(fileCounter, fileCount, fileRelativePath), end="\n\n")
+        except UnicodeError as e:
+            tqdm.write(str(e) + os.linesep)
+            tqdm.write("Non-unicode filename detected. Not showing in terminal.")
 
         try:
             # parsing the source file into a tree.
             sourceCode = javaIOInstance.getFileContent(srcFile)
             tree = javaParseInstance.parse(sourceCode)
-
         except Exception as e:
-            tqdm.write("Error in parsing Java code, skipping the file.\n")
-            tqdm.write(str(e), file=sys.stderr)
+            tqdm.write(str(e) + os.linesep, file=sys.stderr)
+            tqdm.write("Error in parsing Java code, skipping the file.")
             continue
 
         # Calculate metrics
