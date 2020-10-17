@@ -92,13 +92,12 @@ def main(mockArgs: list = None):
         sys.exit(3)
 
     # Find all metrics
-
     for MetricClass in metricList:
         metricInstance = MetricClass(javaParseInstance)
         metricInstanceList.append(metricInstance)
         print("Found metric: \"" + MetricClass.name + "\"")
 
-    print(os.linesep)
+    print("")
 
     # Find all writers
     writerList = Writer.getAllWriters()
@@ -113,17 +112,22 @@ def main(mockArgs: list = None):
         writerInstanceList.append(writerInstance)
         print("Found writer: \"" + WriterClass.name + "\"")
 
-    # Get the file list
+    print("")
 
+    # Get the file list
     if not os.path.isdir(sourcePath):
         print("Source path must be a directory.")
         sys.exit(5)
 
     fileList = list()
 
+    print("Searching for Java files... ", end="\r")
     for root, dirnames, filenames in os.walk(sourcePath):
-        for filePath in fnmatch.filter(filenames, "*.java"):
-            fileList.append(os.path.join(root, filePath))
+        for filename in fnmatch.filter(filenames, "*.java"):
+            fileList.append(os.path.join(root, filename))
+
+        print("Searching for Java files... {} found.".format(len(fileList)), end="\r")
+    print(os.linesep)
 
     fileCounter = 0
     fileCount = len(fileList)
@@ -138,12 +142,26 @@ def main(mockArgs: list = None):
     completeResultsPath = os.path.join(targetPath, "FinalReport")
     for srcFile in tqdm(fileList, dynamic_ncols=True, unit='files'):
         fileCounter += 1
+
+        # Set paths
         fileRelativePath = os.path.relpath(srcFile, sourcePath)
+        srcFileRoot, srcFileName = os.path.split(srcFile)
+        targetDir = os.path.join(targetPath, os.path.relpath(srcFileRoot, sourcePath))
+        targetFilePath = os.path.splitext(os.path.join(targetDir, srcFileName))[0]
+
         try:
             tqdm.write("({:,}/{:,}) {}".format(fileCounter, fileCount, fileRelativePath), end="\n\n")
         except UnicodeError as e:
             tqdm.write(str(e) + os.linesep)
             tqdm.write("Non-unicode filename detected. Not showing in terminal.")
+
+        if options.isContinue:
+            allExists = True
+            for writerInstance in writerInstanceList:
+                allExists = allExists and os.path.isfile(targetFilePath + writerInstance.extension)
+            if allExists:
+                tqdm.write("Results exist, skipping...")
+                continue
 
         try:
             # parsing the source file into a tree.
@@ -165,30 +183,29 @@ def main(mockArgs: list = None):
         # Prepare the result file
         completeResults[fileRelativePath] = metricResultsAggregate
 
-        srcFileRoot, srcFileName = os.path.split(srcFile)
-        targetDir = os.path.join(targetPath, os.path.relpath(srcFileRoot, sourcePath))
         if not os.path.exists(targetDir):
             os.makedirs(targetDir)
-
-        targetFilePath = os.path.splitext(os.path.join(targetDir, srcFileName))[0]
 
         for writerInstance in writerInstanceList:
             fileContent = writerInstance.createTargetFormat(metricResultsAggregate, metricLabels)
             writerInstance.write(targetFilePath, fileContent)
 
-    completeResultsLabels = ["File"]
-    completeResultsLabels.extend(metricLabels)
-    completeResultsAggregate = [completeResultsLabels]
+    if not options.isContinue:
+        completeResultsLabels = ["File"]
+        completeResultsLabels.extend(metricLabels)
+        completeResultsAggregate = [completeResultsLabels]
 
-    for filePath in sorted(completeResults.keys()):
-        for methodName in sorted(completeResults[filePath].keys()):
-            cellList = [filePath, methodName]
-            cellList.extend(completeResults[filePath][methodName])
-            completeResultsAggregate.append(cellList)
+        for fileName in sorted(completeResults.keys()):
+            for methodName in sorted(completeResults[fileName].keys()):
+                cellList = [fileName, methodName]
+                cellList.extend(completeResults[fileName][methodName])
+                completeResultsAggregate.append(cellList)
 
-    for writerInstance in writerInstanceList:
-        completeFileContent = writerInstance.createFinalReportTargetFormat(completeResultsAggregate)
-        writerInstance.write(completeResultsPath, completeFileContent)
+        for writerInstance in writerInstanceList:
+            completeFileContent = writerInstance.createFinalReportTargetFormat(completeResultsAggregate)
+            writerInstance.write(completeResultsPath, completeFileContent)
+
+
 
     print(os.linesep)
 
@@ -211,6 +228,8 @@ def parseCmdArgs(optionParser: OptionParser, mockArgs: list = None) -> Values:
     optionParser.add_option("-t", "--target", action="store", dest="targetPath",
                             default=os.path.dirname(os.path.realpath(__file__)),
                             help="Path to store results.")
+    optionParser.add_option("-c", "--continue", action="store_true", dest="isContinue", default=False,
+                            help="Skip previously analyzed files.")
     optionParser.add_option("--license", action="store_true", dest="isLicenseActive", default=False,
                             help="Output the license and exit.")
 
