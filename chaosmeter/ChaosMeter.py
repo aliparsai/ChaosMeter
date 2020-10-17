@@ -28,18 +28,18 @@
 ################################################################################################################
 import fnmatch
 import os
+import io
 import sys
 from optparse import OptionParser, Values
 
 from littledarwin import JavaParse
-from littledarwin import JavaIO
 from tqdm import tqdm
 
 from .metrics import *
 from .writers import *
 from chaosmeter import License
 
-chaosMeterVersion = '0.1.2'
+chaosMeterVersion = '0.1.3'
 
 
 def main(mockArgs: list = None):
@@ -56,14 +56,14 @@ def main(mockArgs: list = None):
          ▀     █                     ▀                             ▀
               ▀
 
-    ChaosMeter version %s Copyright (C) 2020 Ali Parsai
+    ChaosMeter version {} Copyright (C) 2020 Ali Parsai
 
     ChaosMeter comes with ABSOLUTELY NO WARRANTY.
     This is free software, and you are welcome to redistribute it
     under certain conditions; run ChaosMeter --license for details.
 
 
-    """ % chaosMeterVersion)
+    """.format(chaosMeterVersion))
 
     optionParser = OptionParser(prog="chaosmeter")
     options = parseCmdArgs(optionParser, mockArgs)
@@ -82,7 +82,6 @@ def main(mockArgs: list = None):
     targetPath = os.path.abspath(options.targetPath)
 
     javaParseInstance = JavaParse.JavaParse()
-    javaIOInstance = JavaIO.JavaIO()
 
     metricList = Metric.getAllMetrics()
     metricInstanceList = list()
@@ -125,12 +124,7 @@ def main(mockArgs: list = None):
     for root, dirnames, filenames in os.walk(sourcePath):
         for filename in fnmatch.filter(filenames, "*.java"):
             fileList.append(os.path.join(root, filename))
-
         print("Searching for Java files... {} found.".format(len(fileList)), end="\r")
-    print(os.linesep)
-
-    fileCounter = 0
-    fileCount = len(fileList)
 
     print(os.linesep)
     print("Source Path: ", sourcePath)
@@ -138,6 +132,7 @@ def main(mockArgs: list = None):
     print(os.linesep)
 
     # Main loop
+    fileCounter = 0
     completeResults = dict()
     completeResultsPath = os.path.join(targetPath, "FinalReport")
     for srcFile in tqdm(fileList, dynamic_ncols=True, unit='files'):
@@ -150,7 +145,7 @@ def main(mockArgs: list = None):
         targetFilePath = os.path.splitext(os.path.join(targetDir, srcFileName))[0]
 
         try:
-            tqdm.write("({:,}/{:,}) {}".format(fileCounter, fileCount, fileRelativePath), end="\n\n")
+            tqdm.write("({:,}/{:,}) {}".format(fileCounter, len(fileList), fileRelativePath), end="\n\n")
         except UnicodeError as e:
             tqdm.write(str(e) + os.linesep)
             tqdm.write("Non-unicode filename detected. Not showing in terminal.")
@@ -165,7 +160,7 @@ def main(mockArgs: list = None):
 
         try:
             # parsing the source file into a tree.
-            sourceCode = javaIOInstance.getFileContent(srcFile)
+            sourceCode = getFileContent(srcFile)
             tree = javaParseInstance.parse(sourceCode)
         except Exception as e:
             tqdm.write(str(e) + os.linesep, file=sys.stderr)
@@ -195,21 +190,25 @@ def main(mockArgs: list = None):
         completeResultsLabels.extend(metricLabels)
         completeResultsAggregate = [completeResultsLabels]
 
-        for fileName in sorted(completeResults.keys()):
-            for methodName in sorted(completeResults[fileName].keys()):
-                cellList = [fileName, methodName]
-                cellList.extend(completeResults[fileName][methodName])
+        for cuName in sorted(completeResults.keys()):
+            for methodName in sorted(completeResults[cuName].keys()):
+                cellList = [cuName, methodName]
+                cellList.extend(completeResults[cuName][methodName])
                 completeResultsAggregate.append(cellList)
 
         for writerInstance in writerInstanceList:
             completeFileContent = writerInstance.createFinalReportTargetFormat(completeResultsAggregate)
             writerInstance.write(completeResultsPath, completeFileContent)
 
-
-
     print(os.linesep)
 
     return 0
+
+
+def getFileContent(filePath: str) -> str:
+    with io.open(filePath, mode='r', errors='replace') as contentFile:
+        file_data = contentFile.read()
+    return str(file_data)
 
 
 def parseCmdArgs(optionParser: OptionParser, mockArgs: list = None) -> Values:
