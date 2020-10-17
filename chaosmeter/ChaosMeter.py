@@ -26,11 +26,14 @@
 ##       https://www.parsai.net                                                                               ##
 ##                                                                                                            ##
 ################################################################################################################
-import fnmatch
+
+
 import os
+import fnmatch
 import io
 import sys
 from optparse import OptionParser, Values
+from typing import List
 
 from littledarwin import JavaParse
 from tqdm import tqdm
@@ -39,7 +42,7 @@ from .metrics import *
 from .writers import *
 from chaosmeter import License
 
-chaosMeterVersion = '0.1.3'
+chaosMeterVersion = '0.2.0'
 
 
 def main(mockArgs: list = None):
@@ -68,63 +71,33 @@ def main(mockArgs: list = None):
     optionParser = OptionParser(prog="chaosmeter")
     options = parseCmdArgs(optionParser, mockArgs)
 
-    if options.sourcePath is None:
-        optionParser.print_help()
-        print("\nYou need to specify at least the path to the source files.\n")
-        print("\nExample:\n\t ChaosMeter -p ./src/main -t ./target \n\n")
-        sys.exit(1)
-
-    if not os.path.isdir(options.sourcePath):
-        print("Source path must be a directory.")
-        sys.exit(2)
-
     sourcePath = os.path.abspath(options.sourcePath)
     targetPath = os.path.abspath(options.targetPath)
 
-    javaParseInstance = JavaParse.JavaParse()
 
+    # Find all metrics
     metricList = Metric.getAllMetrics()
-    metricInstanceList = list()
-
     if len(metricList) == 0:
         print("No metrics found!")
         sys.exit(3)
 
-    # Find all metrics
     for MetricClass in metricList:
-        metricInstance = MetricClass(javaParseInstance)
-        metricInstanceList.append(metricInstance)
         print("Found metric: \"" + MetricClass.name + "\"")
-
-    print("")
+    print("Found {} metrics.\n".format(len(metricList)))
 
     # Find all writers
     writerList = Writer.getAllWriters()
-    writerInstanceList = list()
-
     if len(writerList) == 0:
         print("No writers found!")
         sys.exit(4)
 
     for WriterClass in writerList:
-        writerInstance = WriterClass(targetPath)
-        writerInstanceList.append(writerInstance)
         print("Found writer: \"" + WriterClass.name + "\"")
+    print("Found {} writers.\n".format(len(writerList)))
 
-    print("")
+    writerInstanceList = instantiatePlugins(writerList, targetPath)
 
-    # Get the file list
-    if not os.path.isdir(sourcePath):
-        print("Source path must be a directory.")
-        sys.exit(5)
-
-    fileList = list()
-
-    print("Searching for Java files... ", end="\r")
-    for root, dirnames, filenames in os.walk(sourcePath):
-        for filename in fnmatch.filter(filenames, "*.java"):
-            fileList.append(os.path.join(root, filename))
-        print("Searching for Java files... {} found.".format(len(fileList)), end="\r")
+    fileList = findJavaFiles(sourcePath)
 
     print(os.linesep)
     print("Source Path: ", sourcePath)
@@ -135,6 +108,7 @@ def main(mockArgs: list = None):
     fileCounter = 0
     completeResults = dict()
     completeResultsPath = os.path.join(targetPath, "FinalReport")
+
     for srcFile in tqdm(fileList, dynamic_ncols=True, unit='files'):
         fileCounter += 1
 
@@ -145,7 +119,7 @@ def main(mockArgs: list = None):
         targetFilePath = os.path.splitext(os.path.join(targetDir, srcFileName))[0]
 
         try:
-            tqdm.write("({:,}/{:,}) {}".format(fileCounter, len(fileList), fileRelativePath), end="\n\n")
+            tqdm.write("({:,}/{:,}) {}".format(fileCounter, len(fileList), fileRelativePath))
         except UnicodeError as e:
             tqdm.write(str(e) + os.linesep)
             tqdm.write("Non-unicode filename detected. Not showing in terminal.")
@@ -158,20 +132,10 @@ def main(mockArgs: list = None):
                 tqdm.write("Results exist, skipping...")
                 continue
 
-        try:
-            # parsing the source file into a tree.
-            sourceCode = getFileContent(srcFile)
-            tree = javaParseInstance.parse(sourceCode)
-        except Exception as e:
-            tqdm.write(str(e) + os.linesep, file=sys.stderr)
+        metricResults = calculateMetrics(srcFile, metricList)
+        if metricResults is None:
             tqdm.write("Error in parsing Java code, skipping the file.")
             continue
-
-        # Calculate metrics
-
-        metricResults = dict()
-        for metricInstance in metricInstanceList:
-            metricResults[metricInstance.name] = metricInstance.calculate(tree, sourceCode)
 
         metricResultsAggregate, metricLabels = Metric.aggregateMetrics(**metricResults)
 
@@ -205,6 +169,49 @@ def main(mockArgs: list = None):
     return 0
 
 
+def calculateMetrics(srcFile: str, metricList: List[Metric.Metric]):
+    javaParseInstance = JavaParse.JavaParse()
+    metricInstanceList = instantiatePlugins(metricList, javaParseInstance)
+
+    try:
+        # Parse source file
+        sourceCode = getFileContent(srcFile)
+        tree = javaParseInstance.parse(sourceCode)
+    except Exception as e:
+        return None
+
+    # Calculate metrics
+    metricResults = dict()
+    for metricInstance in metricInstanceList:
+        metricResults[metricInstance.name] = metricInstance.calculate(tree, sourceCode)
+        del metricInstance
+    del javaParseInstance
+
+    return metricResults
+
+
+def instantiatePlugins(classList, *args):
+    instanceList = list()
+    for pluginClass in classList:
+        instance = pluginClass(*args)
+        instanceList.append(instance)
+    return instanceList
+
+
+def findJavaFiles(sourcePath: str) -> List[str]:
+    # Get the file list
+    if not os.path.isdir(sourcePath):
+        print("Source path must be a directory.")
+        sys.exit(5)
+    fileList = list()
+    print("Searching for Java files... ", end="\r")
+    for root, dirnames, filenames in os.walk(sourcePath):
+        for filename in fnmatch.filter(filenames, "*.java"):
+            fileList.append(os.path.join(root, filename))
+        print("Searching for Java files... {} found.".format(len(fileList)), end="\r")
+    return fileList
+
+
 def getFileContent(filePath: str) -> str:
     with io.open(filePath, mode='r', errors='replace') as contentFile:
         file_data = contentFile.read()
@@ -221,16 +228,23 @@ def parseCmdArgs(optionParser: OptionParser, mockArgs: list = None) -> Values:
     :return:
     :rtype:
     """
+    #
+    # numberOfCPUs = os.cpu_count()
+    # numberOfCPUs = numberOfCPUs if numberOfCPUs is not None else 1
+
+
     # parsing input options
     optionParser.add_option("-p", "--path", action="store", dest="sourcePath",
-                            default=None, help="Path to Java source files.")
+                            default=None, help="Path to Java source files")
     optionParser.add_option("-t", "--target", action="store", dest="targetPath",
                             default=os.path.dirname(os.path.realpath(__file__)),
-                            help="Path to store results.")
-    optionParser.add_option("-c", "--continue", action="store_true", dest="isContinue", default=False,
-                            help="Skip previously analyzed files.")
-    optionParser.add_option("--license", action="store_true", dest="isLicenseActive", default=False,
-                            help="Output the license and exit.")
+                            help="Path to store results")
+    # optionParser.add_option("--workers", action="store", type="int", dest="workers",
+    #                         default=numberOfCPUs, help="Number of workers to spawn")
+    optionParser.add_option("-c", "--continue", action="store_true", dest="isContinue",
+                            default=False, help="Skips previously analyzed files")
+    optionParser.add_option("--license", action="store_true", dest="isLicenseActive",
+                            default=False, help="Outputs the license and exit")
 
     if mockArgs is None:
         (options, args) = optionParser.parse_args()
@@ -240,5 +254,15 @@ def parseCmdArgs(optionParser: OptionParser, mockArgs: list = None) -> Values:
     if options.isLicenseActive:
         License.outputLicense()
         sys.exit(0)
+
+    if options.sourcePath is None:
+        optionParser.print_help()
+        print("\nYou need to specify at least the path to the source files.\n")
+        print("\nExample:\n\t ChaosMeter -p ./src/main -t ./target \n\n")
+        sys.exit(1)
+
+    if not os.path.isdir(options.sourcePath):
+        print("Source path must be a directory.")
+        sys.exit(2)
 
     return options
