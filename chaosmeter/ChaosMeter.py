@@ -26,21 +26,17 @@
 ##       https://www.parsai.net                                                                               ##
 ##                                                                                                            ##
 ################################################################################################################
-
-
 import os
 import fnmatch
 import io
 import sys
 from optparse import OptionParser, Values
 from typing import List
-
 from littledarwin import JavaParse
 from tqdm import tqdm
-
+from chaosmeter import License
 from .metrics import *
 from .writers import *
-from chaosmeter import License
 
 chaosMeterVersion = '0.2.0'
 
@@ -74,7 +70,6 @@ def main(mockArgs: list = None):
     sourcePath = os.path.abspath(options.sourcePath)
     targetPath = os.path.abspath(options.targetPath)
 
-
     # Find all metrics
     metricList = Metric.getAllMetrics()
     if len(metricList) == 0:
@@ -84,6 +79,10 @@ def main(mockArgs: list = None):
     for MetricClass in metricList:
         print("Found metric: \"" + MetricClass.name + "\"")
     print("Found {} metrics.\n".format(len(metricList)))
+
+    # We need to instatiate once in single-process mode. To be redesigned for mutli-process mode.
+    javaParseInstance = JavaParse.JavaParse()
+    metricInstanceList = instantiatePlugins(metricList, javaParseInstance)
 
     # Find all writers
     writerList = Writer.getAllWriters()
@@ -132,7 +131,7 @@ def main(mockArgs: list = None):
                 tqdm.write("Results exist, skipping...")
                 continue
 
-        metricResults = calculateMetrics(srcFile, metricList)
+        metricResults = calculateMetrics(srcFile, metricList, javaParseInstance, metricInstanceList)
         if metricResults is None:
             tqdm.write("Error in parsing Java code, skipping the file.")
             continue
@@ -169,9 +168,12 @@ def main(mockArgs: list = None):
     return 0
 
 
-def calculateMetrics(srcFile: str, metricList: List[Metric.Metric]):
-    javaParseInstance = JavaParse.JavaParse()
-    metricInstanceList = instantiatePlugins(metricList, javaParseInstance)
+def calculateMetrics(srcFile: str, metricList: List[Metric.Metric],
+                     javaParseExistingInstance: JavaParse.JavaParse = None,
+                     metricExistingInstanceList: List[Metric.Metric] = None):
+    javaParseInstance = JavaParse.JavaParse() if javaParseExistingInstance is None else javaParseExistingInstance
+    metricInstanceList = instantiatePlugins(metricList, javaParseInstance) \
+        if metricExistingInstanceList is None else metricExistingInstanceList
 
     try:
         # Parse source file
@@ -231,7 +233,6 @@ def parseCmdArgs(optionParser: OptionParser, mockArgs: list = None) -> Values:
     #
     # numberOfCPUs = os.cpu_count()
     # numberOfCPUs = numberOfCPUs if numberOfCPUs is not None else 1
-
 
     # parsing input options
     optionParser.add_option("-p", "--path", action="store", dest="sourcePath",
