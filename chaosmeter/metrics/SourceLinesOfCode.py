@@ -3,7 +3,7 @@ from antlr4 import *
 from chaosmeter.metrics import Metric
 
 
-class SourceLinesOfCode(Metric.Metric):
+class SourceLinesOfCode(Metric):
     instantiable = True
     name = "Source Lines of Code"
     abbreviation = "SLOC"

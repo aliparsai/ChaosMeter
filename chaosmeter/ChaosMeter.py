@@ -39,7 +39,7 @@ from chaosmeter import License
 from .metrics import *
 from .writers import *
 
-chaosMeterVersion = '0.1.5'
+chaosMeterVersion = '0.1.6'
 
 
 def main(mockArgs: list = None):
@@ -72,7 +72,7 @@ def main(mockArgs: list = None):
     targetPath = os.path.abspath(options.targetPath)
 
     # Find all metrics
-    metricList = Metric.getAllMetrics()
+    metricList = getAllMetrics()
     if len(metricList) == 0:
         print("No metrics found!")
         sys.exit(3)
@@ -82,11 +82,11 @@ def main(mockArgs: list = None):
     print("Found {} metrics.\n".format(len(metricList)))
 
     # We need to instatiate once in single-process mode. To be redesigned for mutli-process mode.
-    javaParseInstance = JavaParse.JavaParse()
+    javaParseInstance = JavaParse()
     metricInstanceList = instantiatePlugins(metricList, javaParseInstance)
 
     # Find all writers
-    writerList = Writer.getAllWriters()
+    writerList = getAllWriters()
     if len(writerList) == 0:
         print("No writers found!")
         sys.exit(4)
@@ -171,10 +171,10 @@ def main(mockArgs: list = None):
     return 0
 
 
-def calculateMetrics(srcFile: str, metricList: List[Metric.Metric],
-                     javaParseExistingInstance: JavaParse.JavaParse = None,
-                     metricExistingInstanceList: List[Metric.Metric] = None):
-    javaParseInstance = JavaParse.JavaParse() if javaParseExistingInstance is None else javaParseExistingInstance
+def calculateMetrics(srcFile: str, metricList: List[Metric],
+                     javaParseExistingInstance: JavaParse = None,
+                     metricExistingInstanceList: List[Metric] = None):
+    javaParseInstance = JavaParse() if javaParseExistingInstance is None else javaParseExistingInstance
     metricInstanceList = instantiatePlugins(metricList, javaParseInstance) \
         if metricExistingInstanceList is None else metricExistingInstanceList
 

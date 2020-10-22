@@ -4,7 +4,7 @@ from antlr4 import *
 from chaosmeter.metrics import Metric
 
 
-class MutantDensity(Metric.Metric):
+class MutantDensity(Metric):
     instantiable = True
     name = "Mutant Density"
     abbreviation = "MD"

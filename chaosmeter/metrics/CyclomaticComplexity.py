@@ -1,9 +1,10 @@
 from littledarwin.JavaParse import JavaParse
 from antlr4 import *
+
 from chaosmeter.metrics import Metric
 
 
-class CyclomaticComplexity(Metric.Metric):
+class CyclomaticComplexity(Metric):
     instantiable = True
     name = "Cyclomatic Complexity"
     abbreviation = "CC"
