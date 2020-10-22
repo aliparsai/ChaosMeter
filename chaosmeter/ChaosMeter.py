@@ -32,13 +32,14 @@ import io
 import sys
 from optparse import OptionParser, Values
 from typing import List
+
 from littledarwin import JavaParse
 from tqdm import tqdm
 from chaosmeter import License
 from .metrics import *
 from .writers import *
 
-chaosMeterVersion = '0.2.0'
+chaosMeterVersion = '0.1.4'
 
 
 def main(mockArgs: list = None):
@@ -107,7 +108,7 @@ def main(mockArgs: list = None):
     fileCounter = 0
     completeResults = dict()
     completeResultsPath = os.path.join(targetPath, "FinalReport")
-
+    wroteSkipMessage = False
     for srcFile in tqdm(fileList, dynamic_ncols=True, unit='files'):
         fileCounter += 1
 
@@ -117,19 +118,21 @@ def main(mockArgs: list = None):
         targetDir = os.path.join(targetPath, os.path.relpath(srcFileRoot, sourcePath))
         targetFilePath = os.path.splitext(os.path.join(targetDir, srcFileName))[0]
 
-        try:
-            tqdm.write("({:,}/{:,}) {}".format(fileCounter, len(fileList), fileRelativePath))
-        except UnicodeError as e:
-            tqdm.write(str(e) + os.linesep)
-            tqdm.write("Non-unicode filename detected. Not showing in terminal.")
-
         if options.isContinue:
             allExists = True
             for writerInstance in writerInstanceList:
                 allExists = allExists and os.path.isfile(targetFilePath + writerInstance.extension)
             if allExists:
-                tqdm.write("Results exist, skipping...")
+                if not wroteSkipMessage:
+                    tqdm.write("Skipping existing results...")
+                wroteSkipMessage = True
                 continue
+        try:
+            tqdm.write("({:,}/{:,}) {}".format(fileCounter, len(fileList), fileRelativePath))
+            wroteSkipMessage = False
+        except UnicodeError as e:
+            tqdm.write(str(e) + os.linesep)
+            tqdm.write("Non-unicode filename detected. Not showing in terminal.")
 
         metricResults = calculateMetrics(srcFile, metricList, javaParseInstance, metricInstanceList)
         if metricResults is None:
