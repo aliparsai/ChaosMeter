@@ -13,10 +13,9 @@ class MutantDensity(Metric.Metric):
         super().__init__(javaParseInstance)
 
     def calculate(self, tree: RuleContext, sourceCode: str = ""):
-        javaMutate = JavaMutate(tree, sourceCode, self.javaParseInstance, False)
-        javaMutate.gatherMutants(["Traditional"])
+        javaMutate = JavaMutate(tree, sourceCode, self.javaParseInstance)
+        mutantTypes = javaMutate.countMutants(["Traditional"])  # results unused, but can later be useful.
         result = javaMutate.mutantsPerMethod.copy()
-
         del javaMutate
 
         return result
