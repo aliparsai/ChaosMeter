@@ -139,7 +139,7 @@ def main(mockArgs: list = None):
             tqdm.write("Error in parsing Java code, skipping the file.")
             continue
 
-        metricResultsAggregate, metricLabels = Metric.aggregateMetrics(**metricResults)
+        metricResultsAggregate, metricLabels = aggregateMetrics(**metricResults)
 
         # Prepare the result file
         completeResults[fileRelativePath] = metricResultsAggregate
@@ -208,12 +208,18 @@ def findJavaFiles(sourcePath: str) -> List[str]:
     if not os.path.isdir(sourcePath):
         print("Source path must be a directory.")
         sys.exit(5)
+
     fileList = list()
     print("Searching for Java files... ", end="\r")
     for root, dirnames, filenames in os.walk(sourcePath):
         for filename in fnmatch.filter(filenames, "*.java"):
             fileList.append(os.path.join(root, filename))
         print("Searching for Java files... {} found.".format(len(fileList)), end="\r")
+
+    if len(fileList) == 0:
+        print("No Java files found in provided source path.")
+        sys.exit(6)
+
     return fileList
 
 
