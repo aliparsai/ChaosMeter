@@ -39,7 +39,7 @@ from chaosmeter import License
 from .metrics import *
 from .writers import *
 
-chaosMeterVersion = '0.1.6'
+chaosMeterVersion = '0.1.7'
 
 
 def main(mockArgs: list = None):
